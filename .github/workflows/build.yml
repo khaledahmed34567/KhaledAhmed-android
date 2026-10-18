@@ -32,14 +32,15 @@ jobs:
           echo "zip: $Z"
           mkdir -p build
           unzip -q "$Z" -d build
-          D=$(find build -maxdepth 3 -name package.json -not -path '*/node_modules/*' | head -1)
+          D=$(find build -maxdepth 3 -name capacitor.config.json | head -1)
           if [ -z "$D" ]; then
-            echo "::error::الملف المضغوط لا يحتوي على package.json"
+            echo "::error::الملف المضغوط لا يحتوي على مشروع التطبيق (capacitor.config.json)"
             find build | head -50
             exit 1
           fi
           mv "$(dirname "$D")" app
           ls -la app
+          ls -la app/www
 
       - uses: actions/setup-node@v5
         with:
