@@ -64,17 +64,10 @@ jobs:
         env:
           WEB_CLIENT_ID: ${{ vars.WEB_CLIENT_ID }}
           SITE_URL: ${{ vars.SITE_URL }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_NO: ${{ github.run_number }}
         run: |
           exec > >(tee -a "$GITHUB_WORKSPACE/all.log") 2>&1
-          python3 - <<'PY'
-          import os
-          p='www/app.js'
-          s=open(p,encoding='utf-8').read()
-          s=s.replace('__WEB_CLIENT_ID__',os.environ.get('WEB_CLIENT_ID','').strip())
-          s=s.replace('__SITE_URL__',os.environ.get('SITE_URL','').strip())
-          open(p,'w',encoding='utf-8').write(s)
-          print('settings injected')
-          PY
           mkdir -p android-config
           if [ -f "$GITHUB_WORKSPACE/google-services.json" ]; then
             cp "$GITHUB_WORKSPACE/google-services.json" android-config/google-services.json
@@ -82,6 +75,29 @@ jobs:
           else
             echo "google-services.json NOT found"
           fi
+          python3 - <<'PY'
+          import os,json
+          p='www/app.js'
+          s=open(p,encoding='utf-8').read()
+          cid=os.environ.get('WEB_CLIENT_ID','').strip()
+          gj='android-config/google-services.json'
+          if not cid and os.path.exists(gj):
+              try:
+                  d=json.load(open(gj,encoding='utf-8'))
+                  for c in d.get('client',[]):
+                      for o in c.get('oauth_client',[]):
+                          if o.get('client_type')==3 and not cid:
+                              cid=o.get('client_id','')
+              except Exception as e:
+                  print('google-services parse error:',e)
+          print('web client id:', 'found' if cid else 'not set (will use default_web_client_id)')
+          s=s.replace('__WEB_CLIENT_ID__',cid)
+          s=s.replace('__SITE_URL__',os.environ.get('SITE_URL','').strip())
+          s=s.replace('__GH_REPO__',os.environ.get('GH_REPO','').strip())
+          s=s.replace('__BUILD__',os.environ.get('BUILD_NO','').strip())
+          open(p,'w',encoding='utf-8').write(s)
+          print('settings injected')
+          PY
 
       - name: Install dependencies
         working-directory: app
