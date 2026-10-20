@@ -24,14 +24,26 @@ jobs:
         run: |
           exec > >(tee -a "$GITHUB_WORKSPACE/all.log") 2>&1
           echo "== files in repo =="; ls -la
-          Z=$(find . -maxdepth 3 -iname 'KhaledAhmed-App*.zip' | head -1)
-          if [ -z "$Z" ]; then
+          mapfile -d '' ZIPS < <(find . -maxdepth 3 -iname 'KhaledAhmed-App*.zip' -print0)
+          if [ "${#ZIPS[@]}" -eq 0 ]; then
             echo "::error::لم أجد ملف KhaledAhmed-App.zip في المستودع. ارفعه في الجذر بنفس الاسم."
             exit 1
           fi
-          echo "zip: $Z"
+          BEST=""; BESTV=-1
+          for Z in "${ZIPS[@]}"; do
+            rm -rf _t; mkdir _t
+            unzip -q "$Z" -d _t || continue
+            VF=$(find _t -maxdepth 3 -name VERSION | head -1)
+            V=0; if [ -n "$VF" ]; then V=$(tr -dc '0-9' < "$VF"); fi
+            V=${V:-0}
+            echo "zip: $Z -> version $V"
+            if [ "$V" -gt "$BESTV" ]; then BESTV=$V; BEST="$Z"; fi
+          done
+          rm -rf _t
+          echo "USING: $BEST (version $BESTV)"
+          echo "الحزمة المستخدمة: $BEST (إصدار $BESTV)" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p build
-          unzip -q "$Z" -d build
+          unzip -q "$BEST" -d build
           D=$(find build -maxdepth 3 -name capacitor.config.json | head -1)
           if [ -z "$D" ]; then
             echo "::error::الملف المضغوط لا يحتوي على مشروع التطبيق (capacitor.config.json)"
@@ -95,6 +107,8 @@ jobs:
           s=s.replace('__SITE_URL__',os.environ.get('SITE_URL','').strip())
           s=s.replace('__GH_REPO__',os.environ.get('GH_REPO','').strip())
           s=s.replace('__BUILD__',os.environ.get('BUILD_NO','').strip())
+          pk=open('VERSION').read().strip() if os.path.exists('VERSION') else ''
+          s=s.replace('__PKG__',pk)
           open(p,'w',encoding='utf-8').write(s)
           print('settings injected')
           PY
@@ -113,6 +127,8 @@ jobs:
 
       - name: Create Android project
         working-directory: app
+        env:
+          BUILD_NO: ${{ github.run_number }}
         run: |
           exec > >(tee -a "$GITHUB_WORKSPACE/all.log") 2>&1
           rm -rf android
